@@ -5,6 +5,8 @@ LDFLAGS_user = -lpthread
 
 obj-m += khttpd.o
 khttpd-objs := \
+	xs.o          \
+	fib.o         \
 	http_parser.o \
 	http_server.o \
 	main.o

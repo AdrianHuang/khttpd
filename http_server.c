@@ -4,8 +4,12 @@
 #include <linux/sched/signal.h>
 #include <linux/tcp.h>
 
+#include "fib.h"
+
 #include "http_parser.h"
 #include "http_server.h"
+
+#define HTTP_HEADER_LEN 128
 
 #define CRLF "\r\n"
 
@@ -19,6 +23,17 @@
     "HTTP/1.1 200 OK" CRLF "Server: " KBUILD_MODNAME CRLF     \
     "Content-Type: text/plain" CRLF "Content-Length: 12" CRLF \
     "Connection: Keep-Alive" CRLF CRLF "Hello World!" CRLF
+#define HTTP_RESPONSE_200                                      \
+    ""                                                         \
+    "HTTP/1.1 200 OK" CRLF "Server: " KBUILD_MODNAME CRLF      \
+    "Content-Type: text/plain" CRLF "Content-Length: %zu" CRLF \
+    "Connection: Close" CRLF CRLF "%s" CRLF
+#define HTTP_RESPONSE_200_KEEPALIVE                            \
+    ""                                                         \
+    "HTTP/1.1 200 OK" CRLF "Server: " KBUILD_MODNAME CRLF      \
+    "Content-Type: text/plain" CRLF "Content-Length: %zu" CRLF \
+    "Connection: Keep-Alive" CRLF CRLF "%s" CRLF
+
 #define HTTP_RESPONSE_501                                              \
     ""                                                                 \
     "HTTP/1.1 501 Not Implemented" CRLF "Server: " KBUILD_MODNAME CRLF \
@@ -37,6 +52,16 @@ struct http_request {
     enum http_method method;
     char request_url[128];
     int complete;
+};
+
+struct url_func {
+    char *str;
+    char *(*func)(unsigned int n);
+};
+
+static struct url_func url_funcs[] = {
+    {"fib", fib_sequence},
+    {NULL, NULL},
 };
 
 static int http_server_recv(struct socket *sock, char *buf, size_t size)
@@ -73,17 +98,98 @@ static int http_server_send(struct socket *sock, const char *buf, size_t size)
     return done;
 }
 
+static struct url_func *get_url_func(char *str)
+{
+    struct url_func *ptr;
+
+    for (ptr = url_funcs; ptr->str; ptr++) {
+        if (!strcmp(str, ptr->str))
+            return ptr;
+    }
+
+    return NULL;
+}
+
+static char *get_root_content(char *str)
+{
+    int len = strlen(str);
+    char *buf;
+
+    buf = kmalloc(len + 1, GFP_KERNEL);
+    if (!buf) {
+        printk("Kmalloc failed!\n");
+        return NULL;
+    }
+
+    strncpy(buf, str, len);
+    buf[len] = 0;
+
+    return buf;
+}
+
+static char *parse_url(char *str)
+{
+    struct url_func *url_func;
+    char *token;
+
+    if (strlen(str) == 1 && str[0] == '/')
+        return get_root_content("Hello World!");
+
+    /* Skip the first character '/' */
+    str++;
+
+    token = strsep(&str, "/");
+    if (!token)
+        return NULL;
+
+    url_func = get_url_func(token);
+    if (!url_func)
+        return NULL;
+
+    token = strsep(&str, "/");
+    if (!token)
+        return NULL;
+
+    return url_func->func(simple_strtol(token, NULL, 10));
+}
+
 static int http_server_response(struct http_request *request, int keep_alive)
 {
+    char *tmp = NULL;
     char *response;
 
     pr_info("requested_url = %s\n", request->request_url);
-    if (request->method != HTTP_GET)
+    if (request->method != HTTP_GET) {
         response = keep_alive ? HTTP_RESPONSE_501_KEEPALIVE : HTTP_RESPONSE_501;
-    else
-        response = keep_alive ? HTTP_RESPONSE_200_KEEPALIVE_DUMMY
-                              : HTTP_RESPONSE_200_DUMMY;
+    } else {
+        char *content = parse_url(request->request_url);
+        if (!content) {
+            response = keep_alive ? HTTP_RESPONSE_200_KEEPALIVE_DUMMY
+                                  : HTTP_RESPONSE_200_DUMMY;
+        } else {
+            size_t content_len = strlen(content);
+
+            tmp = kmalloc(HTTP_HEADER_LEN + content_len, GFP_KERNEL);
+            if (!tmp) {
+                printk("malloc failed!\n");
+                response = keep_alive ? HTTP_RESPONSE_200_KEEPALIVE_DUMMY
+                                      : HTTP_RESPONSE_200_DUMMY;
+            } else {
+                snprintf(tmp, HTTP_HEADER_LEN + content_len,
+                         keep_alive ? HTTP_RESPONSE_200_KEEPALIVE
+                                    : HTTP_RESPONSE_200,
+                         content_len, content);
+                response = tmp;
+            }
+            kfree(content);
+        }
+    }
+
     http_server_send(request->socket, response, strlen(response));
+
+    if (tmp)
+        kfree(tmp);
+
     return 0;
 }
 

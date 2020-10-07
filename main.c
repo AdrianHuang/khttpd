@@ -6,6 +6,7 @@
 #include <net/sock.h>
 
 #include "http_server.h"
+#include "xs.h"
 
 #define DEFAULT_PORT 8081
 #define DEFAULT_BACKLOG 100
@@ -104,6 +105,13 @@ static int __init khttpd_init(void)
         close_listen_socket(listen_socket);
         return PTR_ERR(http_server);
     }
+
+    /*
+     * Just for ignoring the warning message about unused function
+     * by the tool 'cppcheck'.
+     */
+    xs_trivia_test();
+
     return 0;
 }
 
