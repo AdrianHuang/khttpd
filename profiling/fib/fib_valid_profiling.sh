@@ -53,7 +53,7 @@ do
     # Extract second field and milisecond field
     sec=`echo "${end_time[0]} - ${start_time[0]}" | bc`
     ms=`echo "${end_time[1]} - ${start_time[1]}" | bc`
-   
+
     # Time spent in milisecond unit
     total_ms=`echo "$sec * 1000000 + $ms" | bc`
 
