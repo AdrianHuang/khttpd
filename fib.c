@@ -101,8 +101,20 @@ static int string_number_add(xs *a, xs *b, xs *out)
     reverse_str(data_a, size_a);
     reverse_str(data_b, size_b);
 
-    if (out)
+    if (xs_size(a) > xs_size(b))
+        __swap((void *) &a, (void *) &b, sizeof(void *));
+
+    if (out) {
+        xs_free(out);
+
         *out = *xs_tmp(buf);
+
+        xs_free(a);
+        xs_copy(a, b);
+
+        xs_free(b);
+        xs_copy(b, out);
+    }
 
     kfree(buf);
 
@@ -111,24 +123,18 @@ static int string_number_add(xs *a, xs *b, xs *out)
 
 char *fib_sequence(unsigned int k)
 {
-    char *buf;
-    int i, n;
-    xs *f;
+    xs f[3] = {*xs_tmp("0"), *xs_tmp("1"), *xs_tmp("1")};
+    int i, n, idx;
+    char *buf = NULL;
 
-    f = kmalloc(sizeof(*f) * (k + 2), GFP_KERNEL);
-    if (!f) {
-        printk("kmalloc for 'xs' object failed!\n");
-        return NULL;
+    for (i = 2; i <= k; i++) {
+        if (string_number_add(&f[0], &f[1], &f[2]))
+            goto out;
     }
 
-    f[0] = *xs_tmp("0");
-    f[1] = *xs_tmp("1");
+    idx = k <= 1 ? k : 2;
 
-    for (i = 2; i <= k; i++)
-        if (string_number_add(&f[i - 1], &f[i - 2], &f[i]))
-            goto out;
-
-    n = xs_size(&f[k]);
+    n = xs_size(&f[idx]);
 
     buf = kmalloc(n + 1, GFP_KERNEL);
     if (!buf) {
@@ -136,14 +142,12 @@ char *fib_sequence(unsigned int k)
         goto out;
     }
 
-    strncpy(buf, xs_data(&f[k]), n);
+    strncpy(buf, xs_data(&f[idx]), n);
     buf[n] = 0;
 
 out:
-    for (i = 0; i <= k; i++)
+    for (i = 0; i <= 2; i++)
         xs_free(&f[i]);
-
-    kfree(f);
 
     return buf;
 }
