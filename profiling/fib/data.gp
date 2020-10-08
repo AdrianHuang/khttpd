@@ -1,6 +1,6 @@
 set title "Intel(R) Core(TM) i5 CPU M 520 @ 2.40GHz - 4 cores (HT enabled)"
 set xlabel "Fibonacci number: Fn"
-set ylabel "Time Cost (ms)"
+set ylabel "Time Cost (us)"
 set term png enhanced font 'Verdana,10'
 set output "fib.png"
 set key left
