@@ -158,7 +158,7 @@ static int http_server_response(struct http_request *request, int keep_alive)
     char *tmp = NULL;
     char *response;
 
-    pr_info("requested_url = %s\n", request->request_url);
+    pr_debug("requested_url = %s\n", request->request_url);
     if (request->method != HTTP_GET) {
         response = keep_alive ? HTTP_RESPONSE_501_KEEPALIVE : HTTP_RESPONSE_501;
     } else {
